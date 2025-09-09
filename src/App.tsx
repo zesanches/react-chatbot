@@ -2,7 +2,7 @@ import { Chatbot } from "./components/Chatbot";
 
 const App = () => {
   return (
-    <div className="h-dvh w-full flex justify-end items-end bg-zinc-800">
+    <div className="h-dvh w-full flex justify-end items-end bg-black">
       <Chatbot provider="chrome" />
     </div>
   );
