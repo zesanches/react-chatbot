@@ -3,7 +3,6 @@ import { useChatbot } from "../hooks/useChatbot";
 
 type ChatbotProps = {
   provider: "huggingface" | "chrome";
-  systemPrompt: string;
   avatar?: string;
 };
 
@@ -26,9 +25,7 @@ export function Chatbot({ provider, avatar }: ChatbotProps) {
   };
 
   useEffect(() => {
-    return () => {
-      init();
-    };
+    init();
   }, [init]);
 
   return (
@@ -37,7 +34,7 @@ export function Chatbot({ provider, avatar }: ChatbotProps) {
         {messages.map((message: Message, index: number) => (
           <div
             key={index}
-            className={`flex items-center max-w-[70%] px-3 py-2 rounded-md ${
+            className={`flex items-center max-w-[70%] px-3 py-2 rounded-md break-words break-all ${
               message.role === "user"
                 ? "bg-blue-500 text-white self-end"
                 : "bg-gray-200 text-gray-900 self-start"

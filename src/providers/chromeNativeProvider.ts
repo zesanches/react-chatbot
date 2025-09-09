@@ -25,26 +25,46 @@ export function createChromeNativeProvider() {
 
     messages.push({ role: "system", content: initialPrompts });
 
+    console.log(messages);
+
     const lm =
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window as any).LanguageModel ?? (window as any).ai.languageModel;
 
-    session = await lm.create({
-      initialPrompts: messages,
-    });
+    const availability = await lm.availability();
 
-    return { isCreated: true, initialPrompts };
+    if (availability) {
+      session = await lm.create({
+        initialPrompts: messages,
+      });
+
+      return { isCreated: true, initialPrompts };
+    }
+
+    return { isCreated: false, initialPrompts };
   }
 
-  async function prompt(text: string, signal?: AbortSignal): Promise<string> {
+  async function prompt(
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<ReadableStream<string>> {
     if (!session) throw new Error("Session não inicializada");
 
-    console.log(messages);
-    messages.push({ role: "user", content: text });
+    const lm =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).LanguageModel ?? (window as any).ai.languageModel;
 
-    return session.promptStreaming(messages, {
-      signal,
-    }) as unknown as Promise<string>;
+    const availability = await lm.availability();
+
+    if (availability) {
+      messages.push({ role: "user", content: text });
+
+      return session.promptStreaming(messages, {
+        signal,
+      });
+    }
+
+    throw new Error("Modelo indisponível");
   }
 
   return { init, prompt };

@@ -33,6 +33,7 @@ export function useChatbot({
 
   const init = useCallback(async () => {
     let initialPrompts = "";
+
     try {
       const res = await fetch(initialPromptsFile);
 
@@ -54,13 +55,36 @@ export function useChatbot({
       setMessages((prev) => [...prev, userMessage]);
 
       try {
-        const response = await chatProvider.prompt(
+        const stream = await chatProvider.prompt(
           text,
           abortController.current.signal,
         );
-        const botMessage: Message = { role: "assistant", content: response };
 
+        // Criar mensagem "vazia" do bot e ir atualizando
+        const botMessage: Message = { role: "assistant", content: "" };
         setMessages((prev) => [...prev, botMessage]);
+
+        const reader = (stream as ReadableStream<string>).getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          const chunk =
+            typeof value === "string" ? value : decoder.decode(value);
+
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+
+            if (last.role === "assistant") {
+              last.content += chunk;
+            }
+
+            return [...updated];
+          });
+        }
       } catch (err) {
         console.error(err);
       } finally {
