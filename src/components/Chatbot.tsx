@@ -10,6 +10,7 @@ type ChatbotProps = {
 type Message = {
   role: "user" | "assistant" | "system";
   content: string;
+  timestamp: number;
 };
 
 type ChatbotConfig = {
@@ -25,6 +26,8 @@ type ChatbotConfig = {
   userText?: string;
   buttonColor?: string;
   typingDelay?: number;
+  showClearButton?: boolean;
+  limit: number;
 };
 
 const defaultConfig: ChatbotConfig = {
@@ -40,6 +43,8 @@ const defaultConfig: ChatbotConfig = {
   userText: "#ffffff",
   buttonColor: "#23A267",
   typingDelay: 1200,
+  showClearButton: false,
+  limit: 10,
 };
 
 const parseMarkdown = (text: string): string => {
@@ -59,7 +64,13 @@ export function Chatbot({
   config: userConfig,
 }: ChatbotProps) {
   const config = { ...defaultConfig, ...userConfig };
-  const { messages, loading, sendMessage, init } = useChatbot({ provider });
+  const { messages, loading, sendMessage, init, clearChat } = useChatbot({
+    provider,
+    config: {
+      ...config,
+      limit: config.limit || 10,
+    },
+  });
 
   const [input, setInput] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -96,6 +107,16 @@ export function Chatbot({
 
   const handleClose = () => {
     setIsOpen(false);
+  };
+
+  const handleClearChat = () => {
+    if (
+      window.confirm(
+        "Tem certeza que deseja limpar todo o histórico da conversa?",
+      )
+    ) {
+      clearChat();
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -243,6 +264,31 @@ export function Chatbot({
           >
             <img src={avatar} alt="Bot" className="w-8 h-8 rounded-full" />
             <span className="flex-1 text-lg">{config.chatbotName}</span>
+
+            {/* Botão de limpar chat (opcional) */}
+            {config.showClearButton && messages.length > 0 && (
+              <button
+                onClick={handleClearChat}
+                className="text-gray-400 hover:text-white text-sm bg-transparent border-none cursor-pointer transition-colors duration-200 p-1 rounded hover:bg-white/10"
+                aria-label="Limpar chat"
+                title="Limpar conversa"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </button>
+            )}
+
             <button
               onClick={handleClose}
               className="text-gray-400 hover:text-white text-2xl font-bold leading-none bg-transparent border-none cursor-pointer transition-colors duration-200"
@@ -256,26 +302,28 @@ export function Chatbot({
             className="messages-container flex-1 p-3 overflow-y-auto space-y-3"
             style={{ backgroundColor: config.backgroundColor }}
           >
-            {firstMessageShown && config.firstBotMessage && (
-              <div className="flex items-start gap-3">
-                <img
-                  src={avatar}
-                  alt="Bot"
-                  className="w-8 h-8 rounded-full flex-shrink-0"
-                />
-                <div
-                  className="max-w-xs px-3 py-2 rounded-2xl text-sm leading-relaxed"
-                  style={{
-                    backgroundColor: config.botBubble,
-                    color: config.botText,
-                    borderBottomLeftRadius: "6px",
-                  }}
-                  dangerouslySetInnerHTML={{
-                    __html: parseMarkdown(config.firstBotMessage),
-                  }}
-                />
-              </div>
-            )}
+            {firstMessageShown &&
+              config.firstBotMessage &&
+              messages.length === 0 && (
+                <div className="flex items-start gap-3">
+                  <img
+                    src={avatar}
+                    alt="Bot"
+                    className="w-8 h-8 rounded-full flex-shrink-0"
+                  />
+                  <div
+                    className="max-w-xs px-3 py-2 rounded-2xl text-sm leading-relaxed"
+                    style={{
+                      backgroundColor: config.botBubble,
+                      color: config.botText,
+                      borderBottomLeftRadius: "6px",
+                    }}
+                    dangerouslySetInnerHTML={{
+                      __html: parseMarkdown(config.firstBotMessage),
+                    }}
+                  />
+                </div>
+              )}
 
             {messages.map((message: Message, index: number) => (
               <div key={index}>
@@ -292,7 +340,7 @@ export function Chatbot({
                       {message.content}
                     </div>
                   </div>
-                ) : (
+                ) : message.role === "assistant" ? (
                   <div className="flex items-start gap-3">
                     <img
                       src={avatar}
@@ -311,7 +359,7 @@ export function Chatbot({
                       }}
                     />
                   </div>
-                )}
+                ) : null}
               </div>
             ))}
 

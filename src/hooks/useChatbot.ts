@@ -1,10 +1,11 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { createHuggingFaceProvider } from "../providers/huggingFaceProvider";
 import { createChromeNativeProvider } from "../providers/chromeNativeProvider";
 
 type Message = {
   role: "user" | "assistant" | "system";
   content: string;
+  timestamp: number;
 };
 
 type ChatbotState = {
@@ -12,13 +13,32 @@ type ChatbotState = {
   loading: boolean;
   sendMessage: (message: string) => void;
   init: () => Promise<void>;
+  clearChat: () => void;
+};
+
+const storage = {
+  getMessages(): Message[] {
+    return JSON.parse(localStorage.getItem("chatbot_messages") || "[]");
+  },
+
+  saveMessages(messages: Message[]) {
+    localStorage.setItem("chatbot_messages", JSON.stringify(messages));
+  },
+
+  clearMessages() {
+    localStorage.removeItem("chatbot_messages");
+  },
 };
 
 export function useChatbot({
   provider = "chrome",
+  config = { limit: 10 },
   initialPromptsFile = "/llms.txt",
 }: {
   provider?: "huggingface" | "chrome";
+  config?: {
+    limit: number;
+  };
   initialPromptsFile?: string;
 }): ChatbotState {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -30,6 +50,20 @@ export function useChatbot({
       ? createHuggingFaceProvider()
       : createChromeNativeProvider();
   }, [provider]);
+
+  useEffect(() => {
+    const savedMessages = storage.getMessages();
+    if (savedMessages.length > 0) {
+      setMessages(savedMessages);
+    }
+  }, []);
+
+  const saveMessages = useCallback((newMessages: Message[]) => {
+    const messagesWithoutSystem = newMessages.filter(
+      (m) => m.role !== "system",
+    );
+    storage.saveMessages(messagesWithoutSystem);
+  }, []);
 
   const init = useCallback(async () => {
     let initialPrompts = "";
@@ -47,12 +81,29 @@ export function useChatbot({
     await chatProvider.init(initialPrompts);
   }, [chatProvider, initialPromptsFile]);
 
+  const clearChat = useCallback(() => {
+    setMessages([]);
+    storage.clearMessages();
+  }, []);
+
   const sendMessage = useCallback(
     async (text: string) => {
+      if (messages.length > config.limit) {
+        throw new Error("Limite de mensagens atingido");
+
+        return;
+      }
+
       setLoading(true);
 
-      const userMessage: Message = { role: "user", content: text };
-      setMessages((prev) => [...prev, userMessage]);
+      const userMessage: Message = {
+        role: "user",
+        content: text,
+        timestamp: Date.now(),
+      };
+
+      const updatedMessages = [...messages, userMessage];
+      setMessages(updatedMessages);
 
       try {
         const stream = await chatProvider.prompt(
@@ -60,9 +111,14 @@ export function useChatbot({
           abortController.current.signal,
         );
 
-        // Criar mensagem "vazia" do bot e ir atualizando
-        const botMessage: Message = { role: "assistant", content: "" };
-        setMessages((prev) => [...prev, botMessage]);
+        const botMessage: Message = {
+          role: "assistant",
+          content: "",
+          timestamp: Date.now(),
+        };
+
+        const messagesWithBot = [...updatedMessages, botMessage];
+        setMessages(messagesWithBot);
 
         const reader = (stream as ReadableStream<string>).getReader();
         const decoder = new TextDecoder();
@@ -82,16 +138,19 @@ export function useChatbot({
               last.content += chunk;
             }
 
+            setTimeout(() => saveMessages(updated), 0);
+
             return [...updated];
           });
         }
       } catch (err) {
         console.error(err);
+        saveMessages(updatedMessages);
       } finally {
         setLoading(false);
       }
     },
-    [chatProvider],
+    [chatProvider, messages, saveMessages, config.limit],
   );
 
   return {
@@ -99,5 +158,6 @@ export function useChatbot({
     messages,
     loading,
     sendMessage,
+    clearChat,
   };
 }
