@@ -14,6 +14,7 @@ type ChatbotState = {
   sendMessage: (message: string) => void;
   init: () => Promise<void>;
   clearChat: () => void;
+  abortChatMessage: () => void;
 };
 
 const storage = {
@@ -33,7 +34,7 @@ const storage = {
 export function useChatbot({
   provider = "chrome",
   config = { limit: 10 },
-  initialPromptsFile = "/llms.txt",
+  initialPromptsFile = "/llms.md",
 }: {
   provider?: "huggingface" | "chrome";
   config?: {
@@ -86,6 +87,12 @@ export function useChatbot({
     storage.clearMessages();
   }, []);
 
+  const abortChatMessage = useCallback(() => {
+    if (abortController.current) {
+      abortController.current.abort("Request aborted by user");
+    }
+  }, []);
+
   const sendMessage = useCallback(
     async (text: string) => {
       if (messages.length > config.limit) {
@@ -103,6 +110,7 @@ export function useChatbot({
       };
 
       const updatedMessages = [...messages, userMessage];
+
       setMessages(updatedMessages);
 
       try {
@@ -118,6 +126,7 @@ export function useChatbot({
         };
 
         const messagesWithBot = [...updatedMessages, botMessage];
+
         setMessages(messagesWithBot);
 
         const reader = (stream as ReadableStream<string>).getReader();
@@ -159,5 +168,6 @@ export function useChatbot({
     loading,
     sendMessage,
     clearChat,
+    abortChatMessage,
   };
 }

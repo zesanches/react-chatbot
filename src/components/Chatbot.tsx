@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useChatbot } from "../hooks/useChatbot";
+import Markdown from "react-markdown";
 
 type ChatbotProps = {
   provider: "huggingface" | "chrome";
@@ -47,30 +48,20 @@ const defaultConfig: ChatbotConfig = {
   limit: 10,
 };
 
-const parseMarkdown = (text: string): string => {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.*?)\*/g, "<em>$1</em>")
-    .replace(
-      /`(.*?)`/g,
-      '<code style="background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 3px;">$1</code>',
-    )
-    .replace(/\n/g, "<br>");
-};
-
 export function Chatbot({
   provider,
   avatar = "../public/avatar.jpeg",
   config: userConfig,
 }: ChatbotProps) {
   const config = { ...defaultConfig, ...userConfig };
-  const { messages, loading, sendMessage, init, clearChat } = useChatbot({
-    provider,
-    config: {
-      ...config,
-      limit: config.limit || 10,
-    },
-  });
+  const { messages, loading, sendMessage, init, clearChat, abortChatMessage } =
+    useChatbot({
+      provider,
+      config: {
+        ...config,
+        limit: config.limit || 10,
+      },
+    });
 
   const [input, setInput] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -318,10 +309,9 @@ export function Chatbot({
                       color: config.botText,
                       borderBottomLeftRadius: "6px",
                     }}
-                    dangerouslySetInnerHTML={{
-                      __html: parseMarkdown(config.firstBotMessage),
-                    }}
-                  />
+                  >
+                    <Markdown>{config.firstBotMessage}</Markdown>
+                  </div>
                 </div>
               )}
 
@@ -337,7 +327,7 @@ export function Chatbot({
                         borderBottomRightRadius: "6px",
                       }}
                     >
-                      {message.content}
+                      <Markdown>{message.content}</Markdown>
                     </div>
                   </div>
                 ) : message.role === "assistant" ? (
@@ -354,10 +344,9 @@ export function Chatbot({
                         color: config.botText,
                         borderBottomLeftRadius: "6px",
                       }}
-                      dangerouslySetInnerHTML={{
-                        __html: parseMarkdown(message.content),
-                      }}
-                    />
+                    >
+                      <Markdown>{message.content}</Markdown>
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -389,14 +378,13 @@ export function Chatbot({
               }}
             />
             <button
-              onClick={handleSend}
-              disabled={loading || !input.trim()}
+              onClick={loading ? abortChatMessage : handleSend}
               className="px-4 py-2 rounded-lg border-none text-white text-sm font-medium cursor-pointer transition-all duration-200 disabled:opacity-50 hover:opacity-90"
               style={{
                 backgroundColor: config.buttonColor,
               }}
             >
-              {loading ? "..." : "Enviar"}
+              {loading ? "Cancelar" : "Enviar"}
             </button>
           </div>
         </div>
