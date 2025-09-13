@@ -3,9 +3,10 @@ import { createHuggingFaceProvider } from "../providers/huggingFaceProvider";
 import { createChromeNativeProvider } from "../providers/chromeNativeProvider";
 
 type Message = {
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "error";
   content: string;
   timestamp: number;
+  error?: boolean;
 };
 
 type ChatbotState = {
@@ -30,6 +31,49 @@ const storage = {
     localStorage.removeItem("chatbot_messages");
   },
 };
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+
+    // Erros específicos do Chrome AI
+    if (message.includes("modelo de ia nativo não disponível")) {
+      return "Este navegador não suporta IA nativa. Tente usar o Google Chrome Canary com as flags experimentais ativadas ou mude para o provider Hugging Face.";
+    }
+
+    if (message.includes("session não inicializada")) {
+      return "Erro interno: Sessão não foi inicializada corretamente. Tente recarregar a página.";
+    }
+
+    if (message.includes("modelo indisponível")) {
+      return "O modelo de IA não está disponível no momento. Verifique sua conexão ou tente novamente mais tarde.";
+    }
+
+    if (message.includes("erro na api do hugging face")) {
+      return "Erro na API do Hugging Face. Verifique se o token está correto e se você tem quota disponível.";
+    }
+
+    if (message.includes("failed to fetch") || message.includes("network")) {
+      return "Erro de conexão. Verifique sua internet e tente novamente.";
+    }
+
+    if (message.includes("limite de mensagens atingido")) {
+      return "Você atingiu o limite de mensagens desta conversa. Limpe o chat para continuar.";
+    }
+
+    if (message.includes("request aborted") || message.includes("aborted")) {
+      return "Mensagem cancelada pelo usuário.";
+    }
+
+    if (message.includes("timeout")) {
+      return "A requisição demorou muito para responder. Tente novamente.";
+    }
+
+    return error.message;
+  }
+
+  return "Ocorreu um erro inesperado. Tente novamente.";
+}
 
 export function useChatbot({
   provider = "chrome",
@@ -66,6 +110,24 @@ export function useChatbot({
     storage.saveMessages(messagesWithoutSystem);
   }, []);
 
+  const addErrorMessage = useCallback(
+    (error: unknown) => {
+      const errorMessage: Message = {
+        role: "error",
+        content: getErrorMessage(error),
+        timestamp: Date.now(),
+        error: true,
+      };
+
+      setMessages((prev) => {
+        const updated = [...prev, errorMessage];
+        saveMessages(updated);
+        return updated;
+      });
+    },
+    [saveMessages],
+  );
+
   const init = useCallback(async () => {
     let initialPrompts = "";
 
@@ -77,10 +139,16 @@ export function useChatbot({
       }
     } catch (e: unknown) {
       console.warn("Arquivo de prompts não encontrado, usando systemPrompt", e);
+      // Não mostra erro para o usuário pois não é crítico
     }
 
-    await chatProvider.init(initialPrompts);
-  }, [chatProvider, initialPromptsFile]);
+    try {
+      await chatProvider.init(initialPrompts);
+    } catch (error) {
+      console.error("Erro ao inicializar chatbot:", error);
+      addErrorMessage(error);
+    }
+  }, [chatProvider, initialPromptsFile, addErrorMessage]);
 
   const clearChat = useCallback(() => {
     setMessages([]);
@@ -90,18 +158,34 @@ export function useChatbot({
   const abortChatMessage = useCallback(() => {
     if (abortController.current) {
       abortController.current.abort("Request aborted by user");
+
+      abortController.current = new AbortController();
+
+      const cancelMessage: Message = {
+        role: "error",
+        content: "Mensagem cancelada. Você pode enviar uma nova mensagem.",
+        timestamp: Date.now(),
+        error: true,
+      };
+
+      setMessages((prev) => {
+        const updated = [...prev, cancelMessage];
+        saveMessages(updated);
+        return updated;
+      });
     }
-  }, []);
+  }, [saveMessages]);
 
   const sendMessage = useCallback(
     async (text: string) => {
       if (messages.length > config.limit) {
-        throw new Error("Limite de mensagens atingido");
-
+        addErrorMessage(new Error("Limite de mensagens atingido"));
         return;
       }
 
       setLoading(true);
+
+      abortController.current = new AbortController();
 
       const userMessage: Message = {
         role: "user",
@@ -110,7 +194,6 @@ export function useChatbot({
       };
 
       const updatedMessages = [...messages, userMessage];
-
       setMessages(updatedMessages);
 
       try {
@@ -126,11 +209,11 @@ export function useChatbot({
         };
 
         const messagesWithBot = [...updatedMessages, botMessage];
-
         setMessages(messagesWithBot);
 
         const reader = (stream as ReadableStream<string>).getReader();
         const decoder = new TextDecoder();
+        let hasContent = false;
 
         while (true) {
           const { value, done } = await reader.read();
@@ -138,6 +221,10 @@ export function useChatbot({
 
           const chunk =
             typeof value === "string" ? value : decoder.decode(value);
+
+          if (chunk.trim()) {
+            hasContent = true;
+          }
 
           setMessages((prev) => {
             const updated = [...prev];
@@ -152,14 +239,51 @@ export function useChatbot({
             return [...updated];
           });
         }
+
+        // Se não recebeu conteúdo, adiciona mensagem de erro
+        if (!hasContent) {
+          throw new Error("Nenhuma resposta foi gerada pelo modelo");
+        }
       } catch (err) {
-        console.error(err);
+        console.error("Erro ao enviar mensagem:", err);
+
+        // Se foi cancelado pelo usuário, não adiciona erro (já foi tratado no abortChatMessage)
+        if (err instanceof Error && err.message.includes("aborted")) {
+          // Remove a mensagem do assistente vazia se existir
+          setMessages((prev) => {
+            const updated = [...prev];
+            if (
+              updated[updated.length - 1]?.role === "assistant" &&
+              !updated[updated.length - 1]?.content.trim()
+            ) {
+              updated.pop();
+            }
+            saveMessages(updated);
+            return updated;
+          });
+        } else {
+          // Remove a mensagem do assistente vazia se existir e adiciona erro
+          setMessages((prev) => {
+            const updated = [...prev];
+            if (
+              updated[updated.length - 1]?.role === "assistant" &&
+              !updated[updated.length - 1]?.content.trim()
+            ) {
+              updated.pop();
+            }
+            return updated;
+          });
+
+          addErrorMessage(err);
+        }
+
+        // Salva apenas as mensagens do usuário em caso de erro
         saveMessages(updatedMessages);
       } finally {
         setLoading(false);
       }
     },
-    [chatProvider, messages, saveMessages, config.limit],
+    [chatProvider, messages, saveMessages, config.limit, addErrorMessage],
   );
 
   return {

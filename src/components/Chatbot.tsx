@@ -9,9 +9,10 @@ type ChatbotProps = {
 };
 
 type Message = {
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "error";
   content: string;
   timestamp: number;
+  error?: boolean;
 };
 
 type ChatbotConfig = {
@@ -29,6 +30,8 @@ type ChatbotConfig = {
   typingDelay?: number;
   showClearButton?: boolean;
   limit: number;
+  errorBubble?: string;
+  errorText?: string;
 };
 
 const defaultConfig: ChatbotConfig = {
@@ -43,6 +46,8 @@ const defaultConfig: ChatbotConfig = {
   userBubble: "#23A267",
   userText: "#ffffff",
   buttonColor: "#23A267",
+  errorBubble: "#fee2e2",
+  errorText: "#991b1b",
   typingDelay: 1200,
   showClearButton: false,
   limit: 10,
@@ -133,6 +138,20 @@ export function Chatbot({
     </div>
   );
 
+  const ErrorIcon = () => (
+    <svg
+      className="w-4 h-4 flex-shrink-0"
+      fill="currentColor"
+      viewBox="0 0 20 20"
+    >
+      <path
+        fillRule="evenodd"
+        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+
   return (
     <div className="relative">
       <style>{`
@@ -172,12 +191,22 @@ export function Chatbot({
           }
         }
 
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-2px); }
+          75% { transform: translateX(2px); }
+        }
+
         .chat-window {
           animation: slide-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
         .welcome-bubble {
           animation: bounce-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .error-message {
+          animation: shake 0.5s ease-in-out;
         }
 
         .messages-container {
@@ -256,7 +285,6 @@ export function Chatbot({
             <img src={avatar} alt="Bot" className="w-8 h-8 rounded-full" />
             <span className="flex-1 text-lg">{config.chatbotName}</span>
 
-            {/* Botão de limpar chat (opcional) */}
             {config.showClearButton && messages.length > 0 && (
               <button
                 onClick={handleClearChat}
@@ -346,6 +374,36 @@ export function Chatbot({
                       }}
                     >
                       <Markdown>{message.content}</Markdown>
+                    </div>
+                  </div>
+                ) : message.role === "error" ? (
+                  <div className="flex items-start gap-3">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                      style={{
+                        backgroundColor: config.errorText,
+                      }}
+                    >
+                      <ErrorIcon />
+                    </div>
+                    <div
+                      className="error-message max-w-xs px-3 py-2 rounded-2xl text-sm leading-relaxed border-l-4"
+                      style={{
+                        backgroundColor: config.errorBubble,
+                        color: config.errorText,
+                        borderBottomLeftRadius: "6px",
+                        borderLeftColor: config.errorText,
+                      }}
+                    >
+                      <div className="flex flex-col justify-items-start">
+                        <div className="flex items-center gap-1">
+                          <ErrorIcon />
+                          <div className="font-semibold">Erro</div>
+                        </div>
+                        <div>
+                          <Markdown>{message.content}</Markdown>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ) : null}
