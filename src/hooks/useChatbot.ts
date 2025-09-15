@@ -36,7 +36,6 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
 
-    // Erros específicos do Chrome AI
     if (message.includes("modelo de ia nativo não disponível")) {
       return "Este navegador não suporta IA nativa. Tente usar o Google Chrome Canary com as flags experimentais ativadas ou mude para o provider Hugging Face.";
     }
@@ -139,7 +138,6 @@ export function useChatbot({
       }
     } catch (e: unknown) {
       console.warn("Arquivo de prompts não encontrado, usando systemPrompt", e);
-      // Não mostra erro para o usuário pois não é crítico
     }
 
     try {
@@ -240,16 +238,13 @@ export function useChatbot({
           });
         }
 
-        // Se não recebeu conteúdo, adiciona mensagem de erro
         if (!hasContent) {
           throw new Error("Nenhuma resposta foi gerada pelo modelo");
         }
       } catch (err) {
         console.error("Erro ao enviar mensagem:", err);
 
-        // Se foi cancelado pelo usuário, não adiciona erro (já foi tratado no abortChatMessage)
         if (err instanceof Error && err.message.includes("aborted")) {
-          // Remove a mensagem do assistente vazia se existir
           setMessages((prev) => {
             const updated = [...prev];
             if (
@@ -262,7 +257,6 @@ export function useChatbot({
             return updated;
           });
         } else {
-          // Remove a mensagem do assistente vazia se existir e adiciona erro
           setMessages((prev) => {
             const updated = [...prev];
             if (
@@ -277,7 +271,6 @@ export function useChatbot({
           addErrorMessage(err);
         }
 
-        // Salva apenas as mensagens do usuário em caso de erro
         saveMessages(updatedMessages);
       } finally {
         setLoading(false);

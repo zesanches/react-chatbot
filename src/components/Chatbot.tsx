@@ -32,6 +32,7 @@ type ChatbotConfig = {
   limit: number;
   errorBubble?: string;
   errorText?: string;
+  handleClearChat?: () => void;
 };
 
 const defaultConfig: ChatbotConfig = {
@@ -51,6 +52,7 @@ const defaultConfig: ChatbotConfig = {
   typingDelay: 1200,
   showClearButton: false,
   limit: 10,
+  handleClearChat: () => {},
 };
 
 export function Chatbot({
@@ -105,23 +107,6 @@ export function Chatbot({
     setIsOpen(false);
   };
 
-  const handleClearChat = () => {
-    if (
-      window.confirm(
-        "Tem certeza que deseja limpar todo o histórico da conversa?",
-      )
-    ) {
-      clearChat();
-    }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
   const TypingIndicator = () => (
     <div className="flex items-center gap-1 ml-10 my-2 h-6">
       {[0, 1, 2].map((i) => (
@@ -137,6 +122,18 @@ export function Chatbot({
       ))}
     </div>
   );
+
+  const handleClear = () => {
+    clearChat();
+    userConfig?.handleClearChat?.();
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
 
   const ErrorIcon = () => (
     <svg
@@ -287,7 +284,7 @@ export function Chatbot({
 
             {config.showClearButton && messages.length > 0 && (
               <button
-                onClick={handleClearChat}
+                onClick={handleClear}
                 className="text-gray-400 hover:text-white text-sm bg-transparent border-none cursor-pointer transition-colors duration-200 p-1 rounded hover:bg-white/10"
                 aria-label="Limpar chat"
                 title="Limpar conversa"
